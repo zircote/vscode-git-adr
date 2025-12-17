@@ -15,6 +15,7 @@ export function loadFixture(filename: string): string {
  * Common fixtures
  */
 export const fixtures = {
+  // Text format fixtures
   list: () => loadFixture('list-output.txt'),
   show: () => loadFixture('show-output.md'),
   search: () => loadFixture('search-output.txt'),
@@ -23,4 +24,9 @@ export const fixtures = {
   errorGitNotFound: () => loadFixture('error-git-not-found.txt'),
   errorAdrNotFound: () => loadFixture('error-adr-not-found.txt'),
   errorNotARepo: () => loadFixture('error-not-a-repo.txt'),
+
+  // JSON format fixtures
+  listJson: () => loadFixture('list-output.json'),
+  listJsonEmpty: () => loadFixture('list-output-empty.json'),
+  listJsonMinimal: () => loadFixture('list-output-minimal.json'),
 };

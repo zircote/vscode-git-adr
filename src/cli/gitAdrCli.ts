@@ -9,6 +9,8 @@ import {
   GitAdrNotFoundError,
   NotAGitRepositoryError,
 } from '../utils/errors';
+import { AdrListItem } from '../models/adrListItem';
+import { parseAdrListJson, parseAdrList } from '../utils/parser';
 
 const execFileAsync = promisify(execFile);
 
@@ -244,6 +246,67 @@ export class GitAdrCli {
     );
 
     return result.stdout.trim();
+  }
+
+  /**
+   * List ADRs with structured JSON output, falling back to text parsing.
+   *
+   * This method attempts to use `git adr list -f json` for structured data.
+   * If the JSON format fails (older CLI version or parse error), it falls
+   * back to text parsing with `git adr list`.
+   *
+   * @param workspaceFolder - VS Code workspace folder containing the git repo
+   * @returns Promise resolving to array of typed AdrListItem objects
+   * @throws {GitNotFoundError} If git is not installed
+   * @throws {NotAGitRepositoryError} If the folder is not a git repository
+   * @throws {GitAdrNotFoundError} If git-adr is not installed
+   */
+  async listJson(workspaceFolder: vscode.WorkspaceFolder): Promise<AdrListItem[]> {
+    const config = this.getConfig();
+    const capabilities = await this.checkCapabilities(workspaceFolder);
+
+    if (!capabilities.hasGit) {
+      throw new GitNotFoundError();
+    }
+
+    if (!capabilities.isGitRepo) {
+      throw new NotAGitRepositoryError(workspaceFolder.uri.fsPath);
+    }
+
+    if (!capabilities.hasGitAdr) {
+      throw new GitAdrNotFoundError();
+    }
+
+    // Try JSON format first (preferred path)
+    try {
+      const result = await this.runCommand(
+        config.gitPath,
+        [config.adrSubcommand, 'list', '-f', 'json'],
+        workspaceFolder.uri.fsPath
+      );
+
+      const items = parseAdrListJson(result.stdout);
+      this.logger.log('ADR list source = json');
+      return items;
+    } catch (jsonError) {
+      // Fallback to text parsing
+      this.logger.log('ADR list source = text-fallback');
+      this.logger.log(`JSON parse failed: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+
+      try {
+        const result = await this.runCommand(
+          config.gitPath,
+          [config.adrSubcommand, 'list'],
+          workspaceFolder.uri.fsPath
+        );
+
+        return parseAdrList(result.stdout);
+      } catch (textError) {
+        // If text parsing also fails, throw the original JSON error
+        // to preserve the most informative error message
+        throw jsonError;
+      }
+    }
   }
 
   async show(workspaceFolder: vscode.WorkspaceFolder, adrId: string): Promise<string> {

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "20251217-test-adr",
+    "title": "Test ADR Title",
+    "status": "accepted",
+    "date": "2025-12-17",
+    "tags": ["test", "fixture"],
+    "linked_commits": ["abc123", "def456"],
+    "supersedes": null,
+    "superseded_by": null
+  },
+  {
+    "id": "20251216-another-adr",
+    "title": "Another ADR for Testing",
+    "status": "proposed",
+    "date": "2025-12-16",
+    "tags": ["api", "security"],
+    "linked_commits": ["ghi789"],
+    "supersedes": "20251201-old-adr",
+    "superseded_by": null
+  },
+  {
+    "id": "20251215-deprecated-adr",
+    "title": "Deprecated Decision",
+    "status": "superseded",
+    "date": "2025-12-15",
+    "tags": [],
+    "linked_commits": [],
+    "supersedes": null,
+    "superseded_by": "20251217-test-adr"
+  }
+]

@@ -115,4 +115,131 @@ suite('GitAdrCli Test Suite', () => {
       (err: unknown) => err instanceof CommandTimeoutError
     );
   });
+
+  test('listJson - successful JSON parsing', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    mockRunner.setResponse('git adr list -f json', {
+      stdout: JSON.stringify([
+        { id: '001', title: 'Use TypeScript', status: 'accepted', date: '2025-12-17' },
+        { id: '002', title: 'Implement tree view', status: 'proposed' },
+      ]),
+      stderr: '',
+    });
+
+    const result = await cli.listJson(mockWorkspaceFolder);
+
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].id, '001');
+    assert.strictEqual(result[0].title, 'Use TypeScript');
+    assert.strictEqual(result[0].status, 'accepted');
+    assert.strictEqual(result[0].date, '2025-12-17');
+    assert.strictEqual(result[1].id, '002');
+    assert.strictEqual(result[1].status, 'proposed');
+  });
+
+  test('listJson - empty JSON array', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    mockRunner.setResponse('git adr list -f json', {
+      stdout: '[]',
+      stderr: '',
+    });
+
+    const result = await cli.listJson(mockWorkspaceFolder);
+
+    assert.strictEqual(result.length, 0);
+  });
+
+  test('listJson - fallback to text parsing on JSON error', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    // JSON command fails (old CLI version that doesn't support -f json)
+    mockRunner.setError('git adr list -f json', new Error('Unknown flag: -f'));
+    // Text fallback succeeds
+    mockRunner.setResponse('git adr list', {
+      stdout: '001 | Use TypeScript\n002 | Implement tree view',
+      stderr: '',
+    });
+
+    const result = await cli.listJson(mockWorkspaceFolder);
+
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].id, '001');
+    assert.strictEqual(result[0].title, 'Use TypeScript');
+    assert.strictEqual(result[1].id, '002');
+    assert.strictEqual(result[1].title, 'Implement tree view');
+  });
+
+  test('listJson - fallback to text on invalid JSON', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    // JSON command returns invalid JSON
+    mockRunner.setResponse('git adr list -f json', {
+      stdout: 'not valid json',
+      stderr: '',
+    });
+    // Text fallback succeeds
+    mockRunner.setResponse('git adr list', {
+      stdout: '001: First ADR',
+      stderr: '',
+    });
+
+    const result = await cli.listJson(mockWorkspaceFolder);
+
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].id, '001');
+    assert.strictEqual(result[0].title, 'First ADR');
+  });
+
+  test('listJson - throws JSON error when both fail', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    // JSON command returns invalid JSON
+    mockRunner.setResponse('git adr list -f json', {
+      stdout: 'not valid json',
+      stderr: '',
+    });
+    // Text fallback also fails
+    mockRunner.setError('git adr list', new Error('Command failed'));
+
+    await assert.rejects(
+      () => cli.listJson(mockWorkspaceFolder),
+      /Unexpected token|JSON/
+    );
+  });
+
+  test('listJson - handles full field set with supersedes', async () => {
+    mockRunner.setResponse('git --version', { stdout: 'git version 2.30.0', stderr: '' });
+    mockRunner.setResponse('git rev-parse --git-dir', { stdout: '.git', stderr: '' });
+    mockRunner.setResponse('git adr --version', { stdout: 'git-adr 1.0.0', stderr: '' });
+    mockRunner.setResponse('git adr list -f json', {
+      stdout: JSON.stringify([
+        {
+          id: '002',
+          title: 'New Decision',
+          status: 'accepted',
+          date: '2025-12-17',
+          tags: ['api', 'security'],
+          linked_commits: ['abc123'],
+          supersedes: '001',
+          superseded_by: null,
+        },
+      ]),
+      stderr: '',
+    });
+
+    const result = await cli.listJson(mockWorkspaceFolder);
+
+    assert.strictEqual(result.length, 1);
+    assert.deepStrictEqual(result[0].tags, ['api', 'security']);
+    assert.deepStrictEqual(result[0].linked_commits, ['abc123']);
+    assert.strictEqual(result[0].supersedes, '001');
+    assert.strictEqual(result[0].superseded_by, null);
+  });
 });

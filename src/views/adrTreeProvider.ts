@@ -1,8 +1,101 @@
 import * as vscode from 'vscode';
 import { GitAdrCli } from '../cli/gitAdrCli';
 import { OutputLogger } from '../utils/logger';
-import { parseAdrList, AdrListEntry } from '../utils/parser';
+import { AdrListItem } from '../models/adrListItem';
 import { getWorkspaceFolders } from '../utils/workspace';
+
+/**
+ * Format TreeItem description from AdrListItem metadata.
+ *
+ * Format: `status • date` or `status • date • tags`
+ * Missing fields are gracefully omitted.
+ *
+ * @example
+ * formatDescription({ status: 'accepted', date: '2025-12-17' })
+ * // => "accepted • 2025-12-17"
+ *
+ * formatDescription({ status: 'proposed', date: '2025-12-17', tags: ['security', 'api'] })
+ * // => "proposed • 2025-12-17 • security, api"
+ */
+function formatDescription(item: AdrListItem): string {
+  const parts: string[] = [];
+
+  if (item.status) {
+    parts.push(item.status);
+  }
+
+  if (item.date) {
+    parts.push(item.date);
+  }
+
+  // Only include tags if non-empty
+  if (item.tags && item.tags.length > 0) {
+    parts.push(item.tags.join(', '));
+  }
+
+  return parts.join(' • ');
+}
+
+/**
+ * Format TreeItem tooltip from AdrListItem metadata.
+ *
+ * Produces a multiline tooltip with all available metadata fields.
+ * Linked commits are truncated if there are more than 3.
+ * Supersedes fields show "(none)" if explicitly null.
+ *
+ * @example
+ * ```
+ * ID: 20251217-my-adr
+ * Status: proposed
+ * Date: 2025-12-17
+ * Tags: security, api
+ * Linked commits: abc123, def456
+ * Supersedes: (none)
+ * Superseded by: (none)
+ * ```
+ */
+function formatTooltip(item: AdrListItem): string {
+  const lines: string[] = [];
+
+  // Always show ID
+  lines.push(`ID: ${item.id}`);
+
+  // Optional fields
+  if (item.status) {
+    lines.push(`Status: ${item.status}`);
+  }
+
+  if (item.date) {
+    lines.push(`Date: ${item.date}`);
+  }
+
+  if (item.tags && item.tags.length > 0) {
+    lines.push(`Tags: ${item.tags.join(', ')}`);
+  }
+
+  // Linked commits with truncation
+  if (item.linked_commits && item.linked_commits.length > 0) {
+    const maxCommits = 3;
+    if (item.linked_commits.length > maxCommits) {
+      const shown = item.linked_commits.slice(0, maxCommits);
+      const remaining = item.linked_commits.length - maxCommits;
+      lines.push(`Linked commits: ${shown.join(', ')} and ${remaining} more`);
+    } else {
+      lines.push(`Linked commits: ${item.linked_commits.join(', ')}`);
+    }
+  }
+
+  // Supersedes fields - show "(none)" if explicitly null
+  if (item.supersedes !== undefined) {
+    lines.push(`Supersedes: ${item.supersedes ?? '(none)'}`);
+  }
+
+  if (item.superseded_by !== undefined) {
+    lines.push(`Superseded by: ${item.superseded_by ?? '(none)'}`);
+  }
+
+  return lines.join('\n');
+}
 
 export class AdrTreeItem extends vscode.TreeItem {
   constructor(
@@ -10,13 +103,14 @@ export class AdrTreeItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly contextValue: string,
     public readonly workspaceFolder?: vscode.WorkspaceFolder,
-    public readonly adrEntry?: AdrListEntry
+    public readonly adrEntry?: AdrListItem
   ) {
     super(label, collapsibleState);
 
     if (adrEntry) {
-      this.tooltip = `${adrEntry.id}: ${adrEntry.title}`;
-      this.description = adrEntry.id;
+      // Use structured formatting for description and tooltip
+      this.tooltip = formatTooltip(adrEntry);
+      this.description = formatDescription(adrEntry);
       this.iconPath = new vscode.ThemeIcon('file-text');
       this.command = {
         command: 'gitAdr.show',
@@ -34,7 +128,7 @@ export class AdrTreeProvider implements vscode.TreeDataProvider<AdrTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<AdrTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private adrCache = new Map<string, AdrListEntry[]>();
+  private adrCache = new Map<string, AdrListItem[]>();
 
   constructor(
     private readonly cli: GitAdrCli,
@@ -112,9 +206,8 @@ export class AdrTreeProvider implements vscode.TreeDataProvider<AdrTreeItem> {
           return [this.createErrorNode('git-adr not found', 'Install from https://github.com/zircote/git-adr')];
         }
 
-        // Fetch ADRs
-        const output = await this.cli.list(workspaceFolder);
-        entries = parseAdrList(output);
+        // Fetch ADRs using JSON format (with automatic text fallback)
+        entries = await this.cli.listJson(workspaceFolder);
         this.adrCache.set(cacheKey, entries);
       }
 
