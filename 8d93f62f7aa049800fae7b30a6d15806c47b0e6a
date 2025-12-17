@@ -1,0 +1,131 @@
+---
+date: '2025-12-17'
+id: 20251217-prevent-shell-injection-via-args-array-execution
+status: proposed
+title: Prevent shell injection via args array execution
+---
+
+# Prevent shell injection via args array execution
+
+Status: Accepted
+Date: 2025-12-17
+Deciders: Security lead, Extension engineering lead, Principal engineer
+Technical area: VS Code extension process execution (Node.js child_process)
+
+## Context and Problem Statement
+
+Our VS Code extension must invoke external commands (CLIs, git, ripgrep, language servers, etc.) using Node.js child process APIs. Many command invocations are driven by user-provided inputs (ADR titles, file names, search queries, flags). If those inputs are interpolated into shell command strings or if a shell is used to run commands, an attacker can supply input containing shell metacharacters (for example: ; && | $() ` ` > < " ' \ * ?) and cause arbitrary additional commands to run. This results in remote code execution or data exfiltration when the extension runs on a user's machine.
+
+We must decide a safe, practical execution approach to avoid command injection while maintaining functionality.
+
+Problem statement:
+- Prevent command injection from user-controlled input when launching external processes in the extension.
+- Provide concrete, enforceable rules and implementation guidance for developers working on the extension.
+
+## Decision Drivers
+
+- Strong security: Eliminate command injection attack class.
+- Predictability: Deterministic argument passing without shell parsing.
+- Compatibility: Call common CLI tools reliably across platforms when possible.
+- Developer ergonomics: Reasonable API ergonomics and clear guidance for contributors.
+- Maintainability: Easy to audit and enforce via linting and tests.
+- Minimal runtime overhead or complexity.
+
+## Considered Options
+
+- Use shell-based execution (child_process.exec or spawn/execFile with { shell: true }) and escape or validate all inputs manually.
+- Use child_process.spawn / child_process.execFile with an explicit args array and no shell (the chosen option).
+- Use a wrapper library that builds shell-safe command strings (e.g., shell-escape libraries or template helpers).
+- Reimplement needed functionality in-process (avoid external processes).
+- Allow shell-mode only after thorough validation of inputs (selective shell usage policy).
+
+## Decision Outcome (Chosen option with justification)
+
+Chosen option:
+- Never use a shell to interpret commands. Always use child_process.spawn or child_process.execFile with an explicit args array and shell: false.
+- Strict rules:
+  - Use spawn(cmd, [arg1, arg2, ...], { shell: false, cwd: workspaceFolder, env: ... }) or execFile(cmd, [args], { ... }).
+  - Never construct a command string by concatenating user input.
+  - Never pass user input through shell interpolation (no template strings that are passed to shell).
+  - For cases where shell behavior is absolutely required, use a dedicated, well-justified exception process with security review and auditing, but avoid by default.
+
+Justification:
+- When spawn/execFile receive argv as an array, Node passes the arguments directly to the target executable without shell parsing. This prevents shell metacharacters from being interpreted as operators, so user input cannot cause additional commands to be executed.
+- Compared to escaping inputs for shell execution, passing an args array is simpler, less error-prone, and robust across platforms (except for commands that are shell builtins, see Consequences).
+- This approach directly addresses OWASP Command Injection recommendations: avoid invoking a shell with untrusted input; prefer direct exec interfaces with argument lists.
+
+Practical examples
+
+Unsafe (vulnerable):
+```js
+// Vulnerable: uses shell and string interpolation
+const { exec } = require('child_process');
+const query = userInput; // attacker supplies: 'foo; rm -rf /'
+exec(`rg --json ${query}`, { cwd: workspaceFolder });
+```
+
+Safe (recommended):
+```js
+const { spawn } = require('child_process');
+const args = ['--json', userInput]; // userInput is a single argv element
+const p = spawn('rg', args, { shell: false, cwd: workspaceFolder });
+```
+
+If using execFile:
+```js
+const { execFile } = require('child_process');
+execFile('rg', ['--json', userInput], { cwd: workspaceFolder }, (err, stdout) => { ... });
+```
+
+Implementation guidance (concrete)
+- Always use the arg-array form: spawn(cmd, argsArray, options) or execFile(cmd, argsArray, options).
+- Ensure options.shell is false or omitted (the default for spawn/execFile is not to use a shell).
+- Never use exec(commandString, ...) or spawn(commandString, { shell: true }).
+- Audit code for string-based executions, template literals passed to child_process.exec, and spawn/execFile calls with shell:true.
+- Add lint rules (custom ESLint rule or use existing rules) to flag:
+  - child_process.exec() usage
+  - spawn/execFile with { shell: true }
+  - any dynamic construction of a command string that is executed
+- Add unit/integration tests to assert that the extension never runs a shell for command execution and to exercise variants of user-provided inputs.
+- Document this rule in developer onboarding and the extension CONTRIBUTING.md.
+
+## Consequences
+
+Good
+- Eliminates an entire class of command injection vulnerabilities by removing shell interpretation from the execution path.
+- Easier to audit: review of executed commands checks command + arg array rather than complex quoting/escaping correctness.
+- Simpler developer reasoning: each arg is passed verbatim to the child process; no need to learn shell escaping semantics.
+- More reliable behavior across platforms for true executables (consistent argv handling).
+- Aligns with OWASP guidance and reduces risk surface for privileged/local attacks.
+
+Bad
+- No shell features: you lose shell conveniences such as globbing, pipelines, redirection (>), compound commands (&&, ||), command substitution ($(), backticks), and shell builtins.
+  - Example: `rg 'pattern' | sed 's/x/y/'` cannot be expressed as a single spawn call without using a shell; implement pipelines by spawning multiple processes and piping streams (recommended) or use libraries to perform equivalent logic.
+- Slightly more verbose code: composing args arrays and explicit piping is more code than a single shell string.
+- Some commands on Windows are shell builtins (e.g., dir, copy) or batch scripts; invoking them may require invoking cmd.exe or powershell. That introduces complexity:
+  - Prefer invoking executable programs directly (git.exe, rg.exe) or use platform-appropriate APIs.
+  - If shell is absolutely required for a platform builtin, create a documented, reviewed exception and isolate the input handling carefully (still prefer explicit args where possible).
+- Migration cost: existing code that uses exec() or shell: true must be refactored and tested.
+
+Neutral
+- Performance: negligible difference in most cases. Avoiding a shell removes one process layer and may be slightly faster, but piping multiple spawned processes to replicate shell pipelines adds overhead similar to shells.
+- Developer training required: contributors must learn to use spawn/execFile and to think in terms of argv rather than shell strings.
+- Some edge cases (e.g., executing system-specific wrappers) require special handling; those are exceptions rather than the norm.
+
+Additional mitigations and enforcement
+- Automated code scanning:
+  - Create repository lint rules to forbid exec() and spawn/execFile with shell:true.
+  - CI job that searches for patterns: /exec\(|spawn\([^,]*,.*shell\s*:\s*true/ and flags occurrences.
+- Code review checklist:
+  - Any process-spawning code must use args array.
+  - Justification required for any shell invocation; security sign-off required.
+- Tests:
+  - Fuzz test process argument handling with strings that include shell metacharacters and confirm no extra commands run (e.g., create a sentinel file before/after and assert no unexpected changes).
+- Documentation:
+  - Update CONTRIBUTING.md and README with examples for safe process invocation and patterns for implementing pipelines using streams.
+
+Security references
+- Aligns with OWASP Command Injection prevention guidance: avoid combining untrusted input into shell commands; prefer APIs that accept arguments as arrays (no shell interpretation).
+
+Summary
+- Decision: Never use shell execution for extension-launched processes; always use child_process.spawn/execFile with an args array and shell:false. This eliminates command injection risk, is straightforward to enforce, and the trade-offs (loss of shell conveniences, slight verbosity) are manageable and acceptable for the security benefit.
