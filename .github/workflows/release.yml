@@ -9,6 +9,8 @@ jobs:
   validate:
     name: Validate Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.get_version.outputs.version }}
       tag_version: ${{ steps.get_version.outputs.tag_version }}
@@ -39,6 +41,8 @@ jobs:
     name: Build and Test
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     strategy:
       matrix:
@@ -73,6 +77,8 @@ jobs:
     name: Package and Create Release
     needs: [validate, build_and_test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Need write permission to create releases
     outputs:
       vsix_name: ${{ steps.package.outputs.vsix_name }}
     
@@ -144,6 +150,8 @@ jobs:
     name: Publish to VS Code Marketplace
     needs: [validate, package_and_release]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
