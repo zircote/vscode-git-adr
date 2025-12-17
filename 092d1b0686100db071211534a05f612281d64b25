@@ -1,0 +1,132 @@
+---
+date: '2025-12-17'
+id: 20251217-use-json-first-cli-output-for-structured-data
+status: proposed
+title: Use JSON-first CLI output for structured data parsing
+---
+
+# Title
+Use JSON-first CLI output for structured data parsing
+
+## Context and Problem Statement
+The VS Code extension integrates with the `git-adr` CLI to list ADRs (`git adr list`) and display them in the extension UI. Historically the extension parsed the plain text/table output from the CLI using regular expressions and fragile string parsing logic. This approach is brittle, breaks when the CLI output formatting changes, and complicates adding new fields to the UI.
+
+The `git-adr` CLI can produce structured JSON output via `git adr list -f json` (or equivalent flag). The JSON output contains the following fields per ADR: `id`, `title`, `status`, `date`, `tags`, `linked_commits`, `supersedes`, `superseded_by`. Using this structured output will allow the extension to map CLI data directly to a typed model and render UI reliably.
+
+We need a decision on the parsing strategy that:
+- Minimizes brittle parsing,
+- Preserves backward compatibility for users running older `git-adr` versions without JSON support,
+- Keeps implementation maintainable and testable.
+
+## Decision Drivers
+- Reliability: avoid fragile regex/text parsing that breaks with formatting changes.
+- Accuracy: maintain an exact mapping of ADR fields (IDs, titles, links).
+- Backward compatibility: support older CLI versions lacking JSON output.
+- Performance: parsing should be fast and non-blocking in the extension UI.
+- Security and robustness: avoid executing untrusted code or removing unhandled CLI errors.
+- Developer ergonomics: typed model in TypeScript for compile-time checks and clearer UI code.
+- Observability: ability to detect and report parsing failures for telemetry and user guidance.
+
+## Considered Options
+- Parse CLI text output only (existing approach).
+- Use JSON-first parsing: request JSON from the CLI and parse into a TypeScript interface; fall back to text parsing only if JSON is unavailable or invalid.
+- Use JSON-only parsing (require minimum CLI version and fail for older versions).
+- Implement a dedicated adapter or sidecar library that normalizes output from different CLI versions into a stable JSON format (adds a dependency).
+- Ship our own parser/replicator of `git-adr` logic inside the extension (duplicate logic).
+
+## Decision Outcome
+Chosen option: Use JSON-first parsing via `git adr list -f json` with a resilient fallback to existing text parsing if JSON output cannot be produced or parsed.
+
+Justification:
+- JSON-first yields a clean, typed data model (less brittle than regex) and supports future fields with minimal change.
+- Fallback preserves compatibility for users with older CLI versions, avoiding forced upgrades.
+- JSON-first is low-risk and incremental: primary code path is simpler and safer; fallback is only exercised for older environments.
+- Other options were less acceptable:
+  - Text-only keeps current fragility and is error-prone.
+  - JSON-only forces users to upgrade the CLI; this impacts developer experience and requires strong communication and version gating.
+  - Building and maintaining a sidecar library or duplicating CLI parsing duplicates effort and increases maintenance burden.
+
+Status: Accepted
+
+Implementation details and requirements:
+- Primary code path:
+  - Execute: `git adr list -f json` (or the CLI's documented JSON flag).
+  - Use a short timeout for the CLI process (e.g., 5s) to avoid hanging the extension.
+  - Read stdout and attempt JSON.parse. If valid, validate against a minimal schema and map to the internal TypeScript interface.
+  - TypeScript interface:
+    ```
+    interface AdrListItem {
+      id: string;
+      title: string;
+      status?: string;
+      date?: string;
+      tags?: string[];
+      linked_commits?: string[];
+      supersedes?: string | null;
+      superseded_by?: string | null;
+    }
+    ```
+  - Recommended: validate parsed JSON with a runtime validator (zod/io-ts/ajv) to guard malformed CLI outputs.
+- Fallback path:
+  - If the command fails with exit code indicating unknown option / unsupported format, times out, or produces non-JSON output, then:
+    - Attempt existing text/table parsing path.
+    - Emit a telemetry event (e.g., `gitAdrCli:jsonFallback`) with CLI version info, error type, and whether fallback succeeded.
+    - Surface a user-facing, non-blocking notification (info-level) if fallback parsing fails, recommending CLI upgrade for better experience.
+  - Optionally implement a CLI version check before calling JSON mode:
+    - run `git adr --version` (or parse `git adr list --help`) and, if version >= X (documented support), directly use JSON mode; otherwise, use fallback without attempting JSON. This reduces failed attempts and clarifies behavior.
+- Error handling:
+  - Non-fatal errors: invalid/malformed JSON → fallback to text parsing + telemetry.
+  - Fatal errors: both JSON and text parsing fail → show clear error message with steps (update `git-adr`, check PATH) and a link to extension troubleshooting.
+- Tests:
+  - Unit tests for JSON parsing and mapping to AdrListItem, including presence/absence of optional fields, null values, empty arrays.
+  - Integration tests that spawn a stub/mock CLI producing JSON, malformed JSON, and legacy text to verify paths and UI rendering.
+- UI mapping:
+  - Map fields directly to UI model; optional fields displayed conditionally.
+  - Design UI components to tolerate missing fields (e.g., show placeholder for missing date/status).
+- Security:
+  - Treat CLI output as untrusted; only parse (JSON.parse) and validate; do not evaluate or execute any CLI-provided content.
+
+## Consequences
+
+Good
+- Reliable parsing:
+  - JSON produces deterministic structure; eliminates brittle regex-based parsing and reduces parsing bugs.
+- Strong typing and simpler UI code:
+  - TypeScript interface provides compile-time checks. UI components can depend on stable fields.
+- Easier feature additions:
+  - New fields added to CLI can be mapped with minimal changes; backward-compatible if fields are optional.
+- Better diagnostics and telemetry:
+  - Clear failure modes (JSON parse vs fallback) allow targeted telemetry and user guidance.
+- Performance:
+  - Parsing JSON is faster and simpler than text parsing in most cases.
+
+Bad
+- Dependency on CLI version:
+  - Requires `git-adr` versions that support `-f json`. Users with older versions will hit fallback.
+- Increased code complexity:
+  - Two parsing paths (JSON and text) need to be maintained, tested, and kept in sync in behavior.
+- Possible fragmentation:
+  - Subtle differences between JSON and legacy text semantics may cause slight differences in displayed data unless carefully normalized.
+- Error surface:
+  - If fallback is implemented poorly, users could see inconsistent behavior or duplicate/incorrect ADRs.
+
+Neutral
+- Backward compatibility preserved:
+  - Users with older CLI are supported, but may not get the same robustness until they upgrade.
+- Upgrade path:
+  - Extension can progressively deprecate fallback after sufficient adoption of JSON-capable CLI versions; must be communicated and version-gated.
+- Observability vs noise:
+  - Telemetry for fallbacks provides insight but must be rate-limited to avoid noise.
+
+Appendix: Key edge cases and handling
+- Partial JSON (missing optional fields): allow and render placeholders.
+- Null vs absent: map both null and absent to undefined or null in the UI-consistent way (interface supports null for supersedes/superseded_by).
+- Arrays: ensure empty arrays are handled (no tags/linked_commits).
+- Large lists: stream parsing is not necessary for typical ADR counts; however, if lists can be large, ensure parsing is off the UI thread and use incremental rendering.
+- Unknown fields: ignore unknown fields but preserve them in debug telemetry if needed.
+
+Next steps
+- Implement JSON-first parser with runtime validation and tests.
+- Implement fallback path with telemetry and notification messaging.
+- Add a small migration/upgrade notice in extension docs recommending CLI versions supporting JSON output.
+- Monitor telemetry for fallback usage and plan a deprecation schedule for legacy parsing if adoption is high.
