@@ -10,6 +10,8 @@ dist
 **/*.ts
 **/*.map
 PROMPT.md
+PROMPT_1.md
+PROMPT_2.md
 .gitignore
 .eslintrc.js
 .prettierrc.json
