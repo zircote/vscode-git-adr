@@ -1,12 +1,38 @@
 import * as vscode from 'vscode';
 import { AdrTreeProvider } from './views/adrTreeProvider';
 import { AdrContentProvider } from './documents/adrContentProvider';
-import { GitAdrCli } from './cli/gitAdrCli';
+import { GitAdrCli, ICommandRunner } from './cli/gitAdrCli';
 import { registerCommands } from './commands/registerCommands';
 import { OutputLogger } from './utils/logger';
 
 let outputChannel: vscode.OutputChannel;
 let logger: OutputLogger;
+
+let testCommandRunner: ICommandRunner | undefined;
+
+export type ExtensionTestingApi = {
+  cli: GitAdrCli;
+  treeProvider: AdrTreeProvider;
+  contentProvider: AdrContentProvider;
+  logger: OutputLogger;
+};
+
+let testingApi: ExtensionTestingApi | undefined;
+
+function isTestingEnabled(): boolean {
+  return !!process.env.VSCODE_GIT_ADR_TESTING;
+}
+
+export function setTestCommandRunner(runner: ICommandRunner | undefined): void {
+  if (!isTestingEnabled()) {
+    return;
+  }
+  testCommandRunner = runner;
+}
+
+export function getTestingApi(): ExtensionTestingApi | undefined {
+  return isTestingEnabled() ? testingApi : undefined;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   // Create output channel
@@ -15,7 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
   logger.log('Activating Git ADR extension');
 
   // Create CLI instance
-  const cli = new GitAdrCli(logger);
+  const cli = new GitAdrCli(logger, testCommandRunner);
 
   // Create tree provider
   const treeProvider = new AdrTreeProvider(cli, logger);
@@ -52,6 +78,8 @@ export function activate(context: vscode.ExtensionContext): void {
     onDidChangeWindowState,
     ...commandDisposables
   );
+
+  testingApi = { cli, treeProvider, contentProvider, logger };
 
   logger.log('Git ADR extension activated');
 }

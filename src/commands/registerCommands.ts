@@ -204,20 +204,32 @@ export function registerCommands(
 
   // Search
   disposables.push(
-    vscode.commands.registerCommand('gitAdr.search', async (item?: AdrTreeItem) => {
+    vscode.commands.registerCommand(
+      'gitAdr.search',
+      async (itemOrQuery?: AdrTreeItem | string, explicitQuery?: string) => {
       try {
         const folder = await selectWorkspaceFolder();
         if (!folder) {
           return;
         }
 
+        const item = typeof itemOrQuery === 'string' ? undefined : itemOrQuery;
         const defaultQuery = item?.adrEntry?.title || '';
 
-        const query = await vscode.window.showInputBox({
-          prompt: 'Enter search query',
-          placeHolder: 'keyword or phrase',
-          value: defaultQuery,
-        });
+        const providedQuery =
+          typeof itemOrQuery === 'string'
+            ? itemOrQuery
+            : typeof explicitQuery === 'string'
+              ? explicitQuery
+              : undefined;
+
+        const query =
+          providedQuery ??
+          (await vscode.window.showInputBox({
+            prompt: 'Enter search query',
+            placeHolder: 'keyword or phrase',
+            value: defaultQuery,
+          }));
 
         if (!query) {
           return;
@@ -232,7 +244,8 @@ export function registerCommands(
       } catch (error: unknown) {
         handleError('Failed to search ADRs', error, logger);
       }
-    })
+      }
+    )
   );
 
   // Sync Pull

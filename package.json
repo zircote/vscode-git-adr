@@ -240,10 +240,11 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
+    "pretest:integration": "npm run compile",
     "lint": "eslint src test --ext ts",
     "lint:fix": "eslint src test --ext ts --fix",
-    "test": "node ./out/test/runTest.js",
-    "test:integration": "xvfb-run -a node ./out/test/runTest.js",
+    "test": "node ./scripts/runWithXvfb.js node ./out/test/runTest.js",
+    "test:integration": "node ./scripts/runWithXvfb.js node ./out/test/runTestIntegration.js",
     "package": "npx vsce package",
     "format": "prettier --write \"src/**/*.ts\""
   },

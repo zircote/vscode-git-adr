@@ -1,6 +1,6 @@
 # Git ADR for VS Code
 
-[![CI](https://github.com/zircote/vscod-git-adr/actions/workflows/ci.yml/badge.svg)](https://github.com/zircote/vscod-git-adr/actions/workflows/ci.yml)
+![CI](https://github.com/zircote/vscod-git-adr/actions/workflows/ci.yml/badge.svg)
 
 Manage Architecture Decision Records (ADRs) stored in git notes directly within VS Code.
 
@@ -99,17 +99,27 @@ For more details on git notes syncing, see the [git-adr documentation](https://g
 
 This extension does not collect any telemetry or user data.
 
-## Development
-
-For contributors and maintainers:
-
-- See [RUNBOOK_RELEASE.md](./RUNBOOK_RELEASE.md) for release procedures and Marketplace publishing
-- Run `npm test` for unit tests and `npm run test:integration` for integration tests
-- The extension uses a testable architecture with mock command runners for CI
-
 ## Contributing
 
 Issues and pull requests are welcome at [https://github.com/zircote/vscod-git-adr](https://github.com/zircote/vscod-git-adr)
+
+## Development
+
+- `npm ci`
+- `npm run lint`
+- `npm run compile`
+- `npm test` (unit suite in VS Code extension host)
+- `npm run test:integration` (integration suite in VS Code extension host)
+- `npm run package` (builds a `.vsix`)
+
+On Linux CI/headless environments, run tests under Xvfb:
+
+- `xvfb-run -a npm test`
+- `xvfb-run -a npm run test:integration`
+
+## Release
+
+See [RUNBOOK_RELEASE.md](RUNBOOK_RELEASE.md) for versioning, tagging, packaging, and Marketplace publishing.
 
 ## License
 

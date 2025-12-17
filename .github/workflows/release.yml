@@ -5,189 +5,117 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: read
+
 jobs:
-  validate:
-    name: Validate Release
+  build_and_test:
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-      tag_version: ${{ steps.get_version.outputs.tag_version }}
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Get version from tag
-        id: get_version
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package.json version
         run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          echo "version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
-          echo "Tag version: $TAG_VERSION"
-          echo "Package version: $PACKAGE_VERSION"
-      
-      - name: Validate version match
-        run: |
-          if [ "${{ steps.get_version.outputs.tag_version }}" != "${{ steps.get_version.outputs.version }}" ]; then
-            echo "Error: Tag version (${{ steps.get_version.outputs.tag_version }}) does not match package.json version (${{ steps.get_version.outputs.version }})"
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "Tag version ($TAG) does not match package.json version ($PKG_VERSION)" >&2
             exit 1
           fi
-          echo "Version validation passed"
-  
-  build_and_test:
-    name: Build and Test
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x]
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
+
       - name: Lint
         run: npm run lint
-      
-      - name: Compile TypeScript
-        run: npm run compile
-      
-      - name: Run unit tests
-        run: npm test
-      
-      - name: Run integration tests
-        run: npm run test:integration
-  
-  package_and_release:
-    name: Package and Create Release
-    needs: [validate, build_and_test]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Need write permission to create releases
-    outputs:
-      vsix_name: ${{ steps.package.outputs.vsix_name }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Use Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
+
       - name: Compile
         run: npm run compile
-      
-      - name: Package extension
-        id: package
-        run: |
-          npm run package
-          VSIX_FILE=$(ls *.vsix)
-          echo "vsix_name=$VSIX_FILE" >> $GITHUB_OUTPUT
-          echo "Packaged: $VSIX_FILE"
-      
-      - name: Generate SHA256
-        run: |
-          sha256sum *.vsix > checksums.txt
-          cat checksums.txt
-      
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          VERSION="${{ needs.validate.outputs.version }}"
-          # Extract changelog section for this version
-          if [ -f CHANGELOG.md ]; then
-            echo "Extracting changelog for version $VERSION"
-            # Try to extract with brackets first (Keep a Changelog format)
-            sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
-            # If that didn't work, try without brackets
-            if [ ! -s release_notes.md ]; then
-              sed -n "/## $VERSION/,/## /p" CHANGELOG.md | sed '$d' > release_notes.md
-            fi
-            # If still empty, use fallback
-            if [ ! -s release_notes.md ]; then
-              echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > release_notes.md
-            fi
-          else
-            echo "Release v$VERSION" > release_notes.md
-          fi
-          cat release_notes.md
-      
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release v${{ needs.validate.outputs.version }}
-          body_path: release_notes.md
-          files: |
-            *.vsix
-            checksums.txt
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-  publish_marketplace:
-    name: Publish to VS Code Marketplace
-    needs: [validate, package_and_release]
+
+      - name: Unit tests
+        run: xvfb-run -a npm test
+
+      - name: Integration tests
+        run: xvfb-run -a npm run test:integration
+
+  package_and_release:
     runs-on: ubuntu-latest
+    needs: build_and_test
+
     permissions:
-      contents: read
-    
+      contents: write
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v4
+
       - name: Use Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: 20.x
           cache: 'npm'
-      
-      - name: Check for VSCE_PAT
-        id: check_pat
-        run: |
-          if [ -z "${{ secrets.VSCE_PAT }}" ]; then
-            echo "has_pat=false" >> $GITHUB_OUTPUT
-            echo "Warning: VSCE_PAT secret is not set. Skipping marketplace publish."
-          else
-            echo "has_pat=true" >> $GITHUB_OUTPUT
-          fi
-      
+
       - name: Install dependencies
-        if: steps.check_pat.outputs.has_pat == 'true'
         run: npm ci
-      
-      - name: Install vsce
-        if: steps.check_pat.outputs.has_pat == 'true'
-        run: npm install -g @vscode/vsce
-      
-      - name: Publish to Marketplace
-        if: steps.check_pat.outputs.has_pat == 'true'
-        run: vsce publish -p ${{ secrets.VSCE_PAT }}
-      
-      - name: Marketplace publish skipped
-        if: steps.check_pat.outputs.has_pat == 'false'
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Generate SHA256
         run: |
-          echo "::warning::Marketplace publish skipped - VSCE_PAT secret not configured"
-          echo "To enable marketplace publishing, add VSCE_PAT to repository secrets"
-          echo "See RUNBOOK_RELEASE.md for instructions"
+          set -euo pipefail
+          VSIX="$(ls -1 *.vsix | head -n 1)"
+          sha256sum "$VSIX" > "$VSIX.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.vsix
+            *.vsix.sha256
+
+  publish_marketplace:
+    runs-on: ubuntu-latest
+    needs: package_and_release
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure VSCE_PAT is configured
+        run: |
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "Missing VSCE_PAT secret. Configure it in GitHub repo settings (Actions secrets)." >&2
+            exit 1
+          fi
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install vsce
+        run: npm i -g @vscode/vsce
+
+      - name: Publish to Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: vsce publish -p "$VSCE_PAT"

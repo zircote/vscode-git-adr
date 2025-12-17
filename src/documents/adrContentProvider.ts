@@ -26,7 +26,10 @@ export class AdrContentProvider implements vscode.TextDocumentContentProvider {
       const adrId = adrIdWithExt.replace(/\.md$/, '');
 
       // Find workspace folder
-      const workspaceFolder = getWorkspaceFolders().find((folder) => folder.name === workspaceFolderName);
+      const folders = getWorkspaceFolders();
+      const workspaceFolder =
+        folders.find((folder) => folder.name === workspaceFolderName) ??
+        (folders.length === 1 ? folders[0] : undefined);
 
       if (!workspaceFolder) {
         return `Workspace folder not found: ${workspaceFolderName}`;
