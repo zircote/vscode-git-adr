@@ -68,7 +68,7 @@ export class MockCommandRunner implements ICommandRunner {
     }
 
     // Simulate non-zero exit code
-    if (response.exitCode && response.exitCode !== 0) {
+    if (response.exitCode !== undefined && response.exitCode !== 0) {
       const error = new Error(`Command failed with exit code ${response.exitCode}`) as Error & {
         code: number;
         stderr: string;

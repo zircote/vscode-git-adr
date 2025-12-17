@@ -112,8 +112,13 @@ jobs:
           # Extract changelog section for this version
           if [ -f CHANGELOG.md ]; then
             echo "Extracting changelog for version $VERSION"
-            # This is a simple extraction - customize based on your CHANGELOG format
+            # Try to extract with brackets first (Keep a Changelog format)
             sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+            # If that didn't work, try without brackets
+            if [ ! -s release_notes.md ]; then
+              sed -n "/## $VERSION/,/## /p" CHANGELOG.md | sed '$d' > release_notes.md
+            fi
+            # If still empty, use fallback
             if [ ! -s release_notes.md ]; then
               echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > release_notes.md
             fi
