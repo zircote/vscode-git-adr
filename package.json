@@ -1,0 +1,267 @@
+{
+  "name": "git-adr-vscode",
+  "displayName": "Git ADR",
+  "description": "Manage Architecture Decision Records stored in git notes",
+  "version": "0.1.0",
+  "publisher": "your-publisher-name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zircote/vscod-git-adr"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "git",
+    "adr",
+    "architecture",
+    "decision",
+    "records"
+  ],
+  "icon": "resources/icon.png",
+  "activationEvents": [
+    "onView:gitAdrView",
+    "onCommand:gitAdr.refresh",
+    "onCommand:gitAdr.init",
+    "onCommand:gitAdr.new",
+    "onCommand:gitAdr.list",
+    "onCommand:gitAdr.show",
+    "onCommand:gitAdr.edit",
+    "onCommand:gitAdr.search",
+    "onCommand:gitAdr.syncPull",
+    "onCommand:gitAdr.syncPush",
+    "onCommand:gitAdr.openDocs",
+    "onCommand:gitAdr.configure",
+    "onCommand:gitAdr.refreshDocument"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitAdr",
+          "title": "ADR",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitAdr": [
+        {
+          "id": "gitAdrView",
+          "name": "Architecture Decision Records",
+          "contextualTitle": "ADR"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitAdr.refresh",
+        "title": "Refresh",
+        "category": "Git ADR",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitAdr.init",
+        "title": "Initialize ADR in Repository",
+        "category": "Git ADR",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "gitAdr.new",
+        "title": "New ADR",
+        "category": "Git ADR",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "gitAdr.list",
+        "title": "List ADRs",
+        "category": "Git ADR",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "gitAdr.show",
+        "title": "Show ADR",
+        "category": "Git ADR",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "gitAdr.edit",
+        "title": "Edit ADR",
+        "category": "Git ADR",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "gitAdr.search",
+        "title": "Search ADRs",
+        "category": "Git ADR",
+        "icon": "$(search)"
+      },
+      {
+        "command": "gitAdr.syncPull",
+        "title": "Sync: Pull",
+        "category": "Git ADR",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "gitAdr.syncPush",
+        "title": "Sync: Push",
+        "category": "Git ADR",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "gitAdr.openDocs",
+        "title": "Open Documentation",
+        "category": "Git ADR",
+        "icon": "$(book)"
+      },
+      {
+        "command": "gitAdr.configure",
+        "title": "Configure Extension",
+        "category": "Git ADR",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "gitAdr.refreshDocument",
+        "title": "Refresh Document",
+        "category": "Git ADR",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitAdr.refresh",
+          "when": "view == gitAdrView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitAdr.new",
+          "when": "view == gitAdrView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitAdr.init",
+          "when": "view == gitAdrView",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "gitAdr.search",
+          "when": "view == gitAdrView",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "gitAdr.syncPull",
+          "when": "view == gitAdrView",
+          "group": "2_sync@1"
+        },
+        {
+          "command": "gitAdr.syncPush",
+          "when": "view == gitAdrView",
+          "group": "2_sync@2"
+        },
+        {
+          "command": "gitAdr.configure",
+          "when": "view == gitAdrView",
+          "group": "3_settings@1"
+        },
+        {
+          "command": "gitAdr.openDocs",
+          "when": "view == gitAdrView",
+          "group": "3_settings@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitAdr.show",
+          "when": "view == gitAdrView && viewItem == adr",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "gitAdr.edit",
+          "when": "view == gitAdrView && viewItem == adr",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "gitAdr.search",
+          "when": "view == gitAdrView && viewItem == adr",
+          "group": "2_search@1"
+        },
+        {
+          "command": "gitAdr.syncPull",
+          "when": "view == gitAdrView && viewItem == workspace",
+          "group": "sync@1"
+        },
+        {
+          "command": "gitAdr.syncPush",
+          "when": "view == gitAdrView && viewItem == workspace",
+          "group": "sync@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Git ADR",
+      "properties": {
+        "gitAdr.gitPath": {
+          "type": "string",
+          "default": "git",
+          "description": "Path to git executable"
+        },
+        "gitAdr.adrSubcommand": {
+          "type": "string",
+          "default": "adr",
+          "description": "Git subcommand for ADR operations"
+        },
+        "gitAdr.commandTimeoutMs": {
+          "type": "number",
+          "default": 15000,
+          "description": "Timeout for CLI commands in milliseconds"
+        },
+        "gitAdr.autoRefreshOnFocus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh ADR list when VS Code window gains focus"
+        },
+        "gitAdr.showOutputOnError": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show output channel when errors occur"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src test --ext ts",
+    "lint:fix": "eslint src test --ext ts --fix",
+    "test": "xvfb-run -a node ./out/test/runTest.js",
+    "package": "npx vsce package",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.6",
+    "@types/sinon": "^17.0.2",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.16.0",
+    "@typescript-eslint/parser": "^6.16.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "prettier": "^3.1.1",
+    "sinon": "^17.0.1",
+    "typescript": "5.3.3"
+  }
+}

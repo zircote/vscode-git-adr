@@ -1,0 +1,5 @@
+001 | Use TypeScript for extension development
+002 | Implement TreeView for ADR navigation
+003 | Use virtual documents for ADR content
+004 | Support multi-root workspaces
+005 | Add comprehensive error handling

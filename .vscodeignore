@@ -1,0 +1,16 @@
+node_modules
+src
+test
+out/test
+dist
+*.vsix
+.vscode-test
+.github
+.DS_Store
+**/*.ts
+**/*.map
+PROMPT.md
+.gitignore
+.eslintrc.js
+.prettierrc.json
+.vscodeignore
