@@ -1,0 +1,2 @@
+001 | Use TypeScript for extension development
+003 | Use virtual documents for ADR content

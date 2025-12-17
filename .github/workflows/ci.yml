@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  lint_and_test:
+    name: Lint and Test
     runs-on: ubuntu-latest
     
     strategy:
@@ -15,10 +16,11 @@ jobs:
         node-version: [18.x, 20.x]
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
       
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -29,18 +31,42 @@ jobs:
       - name: Lint
         run: npm run lint
       
-      - name: Compile
+      - name: Compile TypeScript
         run: npm run compile
       
-      - name: Run tests
-        run: xvfb-run -a npm test
+      - name: Run unit tests
+        run: npm test
+      
+      - name: Run integration tests
+        run: npm run test:integration
+  
+  package:
+    name: Package Extension
+    needs: lint_and_test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Compile
+        run: npm run compile
       
       - name: Package extension
         run: npm run package
       
-      - name: Upload VSIX
-        if: matrix.node-version == '20.x'
-        uses: actions/upload-artifact@v3
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: vsix
+          name: vsix-package
           path: '*.vsix'
+          retention-days: 30

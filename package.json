@@ -242,7 +242,8 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src test --ext ts",
     "lint:fix": "eslint src test --ext ts --fix",
-    "test": "xvfb-run -a node ./out/test/runTest.js",
+    "test": "node ./out/test/runTest.js",
+    "test:integration": "xvfb-run -a node ./out/test/runTest.js",
     "package": "npx vsce package",
     "format": "prettier --write \"src/**/*.ts\""
   },

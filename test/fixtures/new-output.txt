@@ -1,0 +1,1 @@
+Created ADR 006: New architecture decision

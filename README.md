@@ -1,5 +1,7 @@
 # Git ADR for VS Code
 
+[![CI](https://github.com/zircote/vscod-git-adr/actions/workflows/ci.yml/badge.svg)](https://github.com/zircote/vscod-git-adr/actions/workflows/ci.yml)
+
 Manage Architecture Decision Records (ADRs) stored in git notes directly within VS Code.
 
 This extension provides a seamless integration with [git-adr](https://github.com/zircote/git-adr), allowing you to create, view, edit, and manage ADRs without leaving your editor.
@@ -96,6 +98,14 @@ For more details on git notes syncing, see the [git-adr documentation](https://g
 ## Privacy
 
 This extension does not collect any telemetry or user data.
+
+## Development
+
+For contributors and maintainers:
+
+- See [RUNBOOK_RELEASE.md](./RUNBOOK_RELEASE.md) for release procedures and Marketplace publishing
+- Run `npm test` for unit tests and `npm run test:integration` for integration tests
+- The extension uses a testable architecture with mock command runners for CI
 
 ## Contributing
 
