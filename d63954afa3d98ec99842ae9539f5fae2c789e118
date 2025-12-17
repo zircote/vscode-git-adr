@@ -1,0 +1,135 @@
+---
+date: '2025-12-17'
+id: 20251217-use-mock-based-testing-without-cli-dependency
+status: proposed
+title: Use mock-based testing without CLI dependency
+---
+
+# Use mock-based testing without CLI dependency
+
+## Context and Problem Statement
+We are implementing automated tests for a VS Code extension that integrates with the git-adr CLI. Historically tests ran against a real git-adr binary which caused slow, flaky CI and made it hard to exercise error cases or malformed outputs. Running VS Code extension tests requires a headless display on Linux (xvfb) which is already handled in CI, but dependence on a locally installed CLI creates operational complexity (installing the binary, ensuring correct version, platform differences).
+
+We need a testing strategy that:
+- Runs fast and deterministically in CI and locally.
+- Allows simulation of edge/error cases not easily triggered with a real CLI (timeouts, malformed output, stderr noise).
+- Tests both small units (parsing, capability detection) and higher-level integration (tree view population, virtual document content) without requiring the real git-adr CLI to be installed.
+
+## Decision Drivers
+- Deterministic and fast CI runs (minimize flakiness and external deps).
+- Ability to simulate edge cases (timeouts, malformed output, stderr).
+- Coverage: unit tests for parsing and capability detection; integration tests for VS Code UI pieces.
+- Low maintenance and clear isolation boundaries in tests.
+- Minimal developer setup to run tests locally (no CLI install required).
+- Maintain confidence the extension will work with the real CLI (mitigation required for divergence).
+- Compatibility with VS Code extension test tooling (requires xvfb-run in Linux CI).
+
+## Considered Options
+- Use the real git-adr CLI in all tests (install binary or require devs to install).
+- Use mock-based testing: inject a MockCommandRunner that returns deterministic fixtures and simulated behaviors; tests do not require git-adr installed.
+- Hybrid approach: mock-based tests by default; run a small number of end-to-end tests against a real git-adr binary in a separate nightly/optional CI job.
+- Containerized real-CLI integration: run tests in a container image that packages the real CLI to ensure identical environment across CI.
+- Provide a fake executable on PATH (script shim) that emulates the CLI behavior by reading test fixtures (less flexible than DI-based mocking, more like integration-level shim).
+
+## Decision Outcome (Chosen option with justification)
+We choose: Use mock-based testing — tests do NOT require the git-adr CLI to be installed. Implementation details:
+- Introduce a MockCommandRunner (injected via the existing CLI wrapper interface) which:
+  - Returns deterministic, fixture-driven stdout, stderr, and exit codes.
+  - Can simulate latency and timeouts (configurable per-call).
+  - Can return malformed JSON or unexpected output to exercise parser robustness.
+  - Allows per-test configuration so different test cases get different fixture sets.
+- Test fixture set:
+  - fixtures/list.json — the JSON output for the list command (valid, edge-case, and empty variants).
+  - fixtures/show.md — markdown content returned by show command (full document, very large documents).
+  - fixtures/search.json — search results, including paging/no-results cases.
+  - fixtures/error_stderr.txt — error messages that appear on stderr with non-zero exit codes.
+  - Variants: malformed-list.json, timeout.json, noisy-stderr.txt etc.
+- Helper utilities for tests:
+  - createTempWorkspace() — creates and configures a temporary project workspace on disk for VS Code to open; returns path and cleanup function.
+  - openWorkspaceInVSCode(workspacePath) — opens workspace in the VS Code test window and returns handles for cleanup.
+  - waitForTreeProviderRefresh(treeProvider, timeoutMs) — wait until the tree provider emits a refresh or a timeout occurs; used to make integration tests deterministic.
+- Test lifecycle:
+  - Inject MockCommandRunner via dependency injection into the CLI wrapper before each test.
+  - Tests configure the MockCommandRunner with specific fixtures and behaviors.
+  - Each test cleans up temp directories and closes/unloads workspace windows.
+  - Reset all injected dependencies and global singletons after each test to avoid cross-test contamination.
+- Test scope:
+  - Unit tests (run in Node, no UI):
+    - CLI wrapper: verifies invocation parameters, correct command line generation, correct handling of stdout/stderr/exit codes using mocks.
+    - Capability detection: determine presence/absence of features by parsing capability commands or inferred behavior using mock responses.
+    - List parsing: JSON parsing, error handling for malformed JSON, and edge cases like very large lists or missing fields.
+  - Integration tests (run as VS Code extension tests with headless display on Linux; use xvfb-run in CI):
+    - Tree view population: verify tree nodes reflect fixtures returned by MockCommandRunner, verify node actions (expand/collapse).
+    - Virtual document content: open ADR virtual documents provided by the extension and assert their markdown content matches fixtures.
+- CI adjustments:
+  - Use xvfb-run on Linux CI agents for running VS Code extension integration tests (headless display requirement).
+  - Keep all extension tests runnable without installing git-adr in CI.
+
+Justification:
+- Mock-based testing meets the goals of determinism, speed, and the ability to exercise error/malformed cases that are hard or impossible to produce reliably using the real CLI.
+- Dependency injection (CLI wrapper abstraction) allows us to swap MockCommandRunner in tests and use the real runner in production.
+- Unit tests and integration tests still provide strong coverage of parsing and UI behavior; the Hybrid mitigation (see Consequences) addresses divergence risk.
+
+## Consequences
+
+Good
+- Fast and deterministic CI runs
+  - No external CLI install step in CI; test runtime limited to extension test harness and Node.
+  - Reduced flakiness from environmental differences across CI agents.
+- Ability to simulate edge cases and errors
+  - Timeouts, slow responses, malformed JSON, and noisy stderr can be exercised deterministically.
+  - Easier to test error-handling code paths that would be rare with the real CLI.
+- Lower barrier for local development
+  - Developers can run full test suite without installing git-adr.
+- Clear test fixtures
+  - Reproducible inputs (fixtures) that can be version-controlled and reviewed in PRs.
+- Fine-grained control over behavior
+  - MockCommandRunner can be extended to simulate process exit codes, delays, streaming output, etc.
+
+Bad
+- Risk of divergence from real git-adr behavior
+  - If fixtures do not accurately model the real CLI, tests may pass while the extension fails in production.
+  - Mitigation: maintain a small set of smoke end-to-end tests against the real CLI in a nightly or optional CI job; run contract checks locally occasionally; periodically refresh fixtures against the real CLI.
+- Maintenance burden for fixtures
+  - Fixtures must be kept up-to-date when the CLI output format changes.
+  - Mitigation: add a developer tool to regenerate fixtures from the real CLI and a test that compares fixtures to real CLI output.
+- Potential for false confidence
+  - Mocked scenarios might not capture concurrency, OS-level file system or environment-specific behavior that occurs with the real CLI.
+  - Mitigation: use a few full integration tests against a real binary (see Hybrid option) and include smoke checks in release process.
+
+Neutral
+- Test types and coverage
+  - Unit tests and integration tests are retained; test shape doesn't change but the inputs are controlled.
+- CI complexity shifts
+  - Eliminates CLI install complexity in primary CI jobs; may add a separate/optional CI job for real-CLI smoke tests.
+- Test execution environment
+  - Integration tests still require VS Code test runner and display support; on Linux CI we must continue to use xvfb-run for headless tests.
+
+Implementation notes / checklist (technical)
+- Ensure CLI wrapper is an explicit interface (e.g., ICommandRunner) that supports:
+  - run(command: string[], options?): Promise<{ stdout: string; stderr: string; exitCode: number; elapsedMs?: number }>
+  - streamRun(...) if streaming is necessary
+- Implement MockCommandRunner with:
+  - registerFixture(commandPattern: RegExp | string, fixture: { stdoutPath?: string; stderrPath?: string; exitCode?: number; delayMs?: number; timeout?: boolean })
+  - ability to inject per-test behavior and to reset between tests
+- Fixture files (examples)
+  - test/fixtures/list/valid.json
+  - test/fixtures/list/malformed.json
+  - test/fixtures/show/full.md
+  - test/fixtures/search/no-results.json
+  - test/fixtures/errors/timeout.txt
+  - test/fixtures/errors/noisy-stderr.txt
+- Test helpers
+  - createTempWorkspace(): { path, cleanup() } — create temporary workspace, initialize minimal git as needed for extension logic
+  - openWorkspaceInVSCode(path): Promise<WorkspaceHandle> — open in test instance
+  - waitForTreeProviderRefresh(treeProvider, timeoutMs): Promise<void> — wait for refresh event or reject after timeout
+- Test lifecycle details
+  - beforeEach: createTempWorkspace() if needed, instantiate MockCommandRunner, inject into CLI wrapper
+  - afterEach: cleanup temp workspace, close VS Code window(s), reset injection/container state, clear fixtures registry
+- CI configuration
+  - Primary CI jobs: run tests without installing git-adr, use MockCommandRunner fixtures.
+  - Linux runner: prefix VS Code extension test invocation with xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' to ensure headless tests run.
+  - Optional/nightly job: run a few end-to-end smoke tests against a real git-adr binary to catch divergence.
+
+Conclusion
+Using mock-based testing with an injected MockCommandRunner gives deterministic, fast, and expressive testing for both unit and integration tests of the VS Code extension. We accept a small maintenance cost for fixtures and mitigate divergence risk with periodic real-CLI smoke tests. This approach reduces CI flakiness, improves developer experience, and lets us test otherwise hard-to-reproduce edge cases.
