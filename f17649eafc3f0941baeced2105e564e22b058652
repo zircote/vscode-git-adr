@@ -1,0 +1,121 @@
+---
+date: '2025-12-17'
+id: 20251217-use-cli-as-source-of-truth-for-adr-operations
+status: proposed
+title: Use CLI as source of truth for ADR operations
+---
+
+# Title
+Use CLI as source of truth for ADR operations
+
+## Context and Problem Statement
+We are building a VS Code extension that provides a UI for working with ADRs managed by git-adr. git-adr stores ADRs in git notes (not as files in the working tree). To show, list, create, and update ADRs the extension must read and write the git notes representation.
+
+Two implementation approaches are possible:
+- Re-implement the git notes parsing and ADR management logic inside the extension.
+- Use the existing git-adr CLI as the authoritative interface and shell out to its commands from the extension.
+
+Re-implementing notes parsing duplicates logic currently implemented in git-adr, introduces maintenance burden, and risks inconsistencies and bugs. Using the CLI means the extension becomes a UI wrapper around an authoritative tool, but adds runtime dependency on that CLI.
+
+This ADR documents the decision to treat the git-adr CLI as the source of truth and to invoke it from the extension for ADR operations.
+
+## Decision Drivers
+- ADRs are stored in git notes; correctness requires faithful reading and writing of that representation.
+- Avoid duplicating parsing/serialization logic already implemented by the git-adr CLI.
+- Minimize maintenance effort and reduce risk of bugs and behavioral drift.
+- Provide a consistent user experience with other tools that use git-adr.
+- Acceptable UX/performance for invoking an external process from a VS Code extension.
+- Security: minimize shell-injection and privilege risks when invoking external tools.
+- Cross-platform behavior (Linux/macOS/Windows) must be handled correctly.
+- Ease of testing: ability to stub or mock CLI execution in unit/integration tests.
+
+## Considered Options
+- Shell out to git-adr CLI for all ADR operations (list, show, new, update, remove, etc.).
+- Re-implement git notes parsing and ADR management logic entirely within the extension (no external CLI dependency).
+- Hybrid approach: shell out for write operations, parse notes directly for read (or vice versa).
+- Use git plumbing commands directly (git notes, git cat-file, git for-each-ref) and implement ADR semantics inside extension.
+- Ship or vendor a bundled copy of git-adr (embed CLI binary with extension) to avoid a user-installed dependency.
+
+## Decision Outcome (Chosen option with justification)
+Chosen option: Shell out to the git-adr CLI and treat the CLI as the source of truth.
+
+Justification:
+- Single authoritative implementation: git-adr already implements note-based storage and domain logic for ADRs. Reusing it prevents duplication and eliminates one major source of divergence.
+- Reduced implementation and maintenance cost: the extension only needs to translate UI actions into CLI commands and display results; it does not need to maintain complex parsing/formatting code.
+- Lower risk of bugs and behavioral drift: users who already rely on the CLI will see the same behavior in the extension.
+- Immediate benefit from CLI improvements: bug fixes, new output formats (e.g., structured/JSON output), and new features in git-adr are available to the extension without changes.
+- Practical and realistic: the extension is primarily a UI layer; making it a thin wrapper around the CLI aligns with single-responsibility and avoids re-implementing a mature tool.
+
+Implementation notes (technical):
+- Use Node.js child_process APIs (prefer spawn with an args array) to invoke commands so we avoid shell interpolation when possible:
+  - spawn(cmd, args, { cwd: repoPath, env: process.env, stdio: ['pipe','pipe','pipe'] })
+  - Do not use shell: true unless strictly necessary.
+- Prefer CLI structured output if available (e.g., --json / --format=json). If git-adr can be extended to provide JSON output, the extension should prefer that to avoid brittle text parsing.
+- Perform a version/feature check at startup (e.g., `git adr --version` or `git adr version`) to:
+  - detect presence of git-adr on PATH,
+  - verify minimum supported version,
+  - detect support for structured output flags.
+- Error handling:
+  - Surface CLI errors to the user with actionable messages (missing CLI, wrong version, permission issue).
+  - Treat non-zero exit codes as failures and capture stderr.
+  - Provide fallbacks (read-only view or helpful instruction to install/update CLI) when CLI is missing or incompatible.
+- Security:
+  - Never build shell command strings with untrusted user input; pass user input as args array.
+  - Validate inputs and sanitize file paths.
+- Cross-platform:
+  - Respect platform differences in executable naming and PATH resolution (e.g., windows .exe).
+  - Allow configuring a custom path to the git-adr binary via extension settings.
+- Performance and UX:
+  - Run commands asynchronously and cancel long-running operations if the user cancels.
+  - Cache results for short periods where appropriate, invalidating on repo change events or relevant git hooks.
+- Testing:
+  - In unit tests, mock/stub child_process.spawn/exec to simulate CLI output and failure modes.
+  - In integration tests, use a controlled test environment with a known git-adr binary/version.
+- Commands the extension will invoke (examples):
+  - git adr list
+  - git adr show <id>
+  - git adr new --title "<title>" ...
+  - git adr edit <id>  (or read content, open editor, then call CLI to save)
+  - git adr remove <id>
+  - git adr --version
+
+## Consequences
+
+Good
+- Single source of truth
+  - All ADR read/write behavior follows the git-adr implementation; no semantic drift between CLI and extension.
+- Reduced complexity and maintenance
+  - Extension codebase remains focused on UI concerns (presentation, editing UX, integration with VS Code APIs).
+  - No need to implement and maintain note-parsing, serialization, or git edge-cases inside the extension.
+- Faster delivery and better reliability
+  - New CLI features or bugfixes immediately benefit the extension.
+- Easier testing of UI logic
+  - CLI execution can be stubbed in tests; extension tests do not need to cover complex parsing code paths.
+- Consistent UX for users who already use git-adr on the command line.
+
+Bad
+- External dependency on CLI installation
+  - The extension requires git-adr to be installed in the user's environment or configured via settings.
+  - Users without the CLI will see degraded functionality; the extension must detect and report this cleanly.
+- Version compatibility and breaking changes
+  - CLI changes (breaking flags, output format) can break the extension unless version checks and robust parsing are in place.
+- Runtime overhead and latency
+  - Forking external processes for many operations can add noticeable latency vs. in-process parsing.
+  - High-frequency operations (e.g., live previews or rapid listing) may require caching to keep UX snappy.
+- Operational complexity
+  - Must handle process lifecycle, streams, timeouts, and cancellation tokens correctly.
+  - Cross-platform edge cases (Windows PATH and quoting) increase implementation detail.
+- Security considerations
+  - If not implemented carefully, invoking external processes can expose shell injection vulnerabilities; must pass args as arrays and avoid shell interpolation.
+
+Neutral
+- Feature coverage
+  - If git-adr lacks certain extension-specific hooks or structured outputs, the extension will need to:
+    - either negotiate new CLI flags/features with the git-adr project,
+    - or implement specific parsing and translation logic for those cases (incremental complexity).
+- Deployment choices
+  - We can choose to require users to install git-adr, provide an installer link, or vendor the CLI; each has trade-offs in support burden and UX.
+- Future hybridization possible
+  - If a strong reason arises (performance or offline mode), we can add a local re-implementation or partial caching layer. That will reintroduce some duplication risk; the decision to shell out leaves that as a mitigatable future option rather than immediate complexity.
+
+Overall, shelling out to git-adr reduces duplication, aligns responsibilities, and yields a more maintainable extension at the cost of managing an external dependency and the runtime complexity of process invocation. Implementation must be careful about argument handling, version detection, error reporting, and cross-platform behavior.
