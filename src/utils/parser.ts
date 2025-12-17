@@ -31,7 +31,20 @@ export function parseAdrListJson(output: string): AdrListItem[] {
     return [];
   }
 
-  const parsed: unknown = JSON.parse(trimmed);
+  // Sanitize JSON: escape unescaped control characters in string literals
+  // This handles malformed JSON from git-adr where newlines in titles aren't escaped
+  const sanitized = trimmed.replace(
+    /"([^"\\]*(\\.[^"\\]*)*)"/g,
+    (match) => {
+      // Replace literal newlines/tabs/etc with escaped versions inside strings
+      return match
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
+    }
+  );
+
+  const parsed: unknown = JSON.parse(sanitized);
 
   // Validate it's an array
   if (!Array.isArray(parsed)) {

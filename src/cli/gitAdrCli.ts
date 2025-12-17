@@ -331,13 +331,39 @@ export class GitAdrCli {
       throw new GitAdrNotFoundError();
     }
 
+    // Use JSON format to get raw markdown content without terminal formatting
     const result = await this.runCommand(
       config.gitPath,
-      [config.adrSubcommand, 'show', adrId],
+      [config.adrSubcommand, 'show', adrId, '-f', 'json'],
       workspaceFolder.uri.fsPath
     );
 
-    return result.stdout;
+    try {
+      // Sanitize JSON: escape unescaped control characters ONLY inside string literals
+      // This handles malformed JSON where newlines in content aren't properly escaped
+      // The regex matches JSON strings (accounting for escaped chars) and sanitizes within
+      const sanitized = result.stdout.replace(
+        /"([^"\\]*(\\.[^"\\]*)*)"/g,
+        (match) => {
+          return match
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+        }
+      );
+
+      const data = JSON.parse(sanitized);
+      this.logger.log(`ADR show parsed successfully, content length: ${data.content?.length || 0}`);
+
+      // Return the raw markdown content
+      const content = data.content || '';
+      return content;
+    } catch (e) {
+      this.logger.error(`Failed to parse ADR JSON: ${e instanceof Error ? e.message : String(e)}`, false);
+      this.logger.log(`Raw output preview: ${result.stdout.substring(0, 200)}`);
+      // Fallback to raw output if JSON parsing fails
+      return result.stdout;
+    }
   }
 
   async edit(workspaceFolder: vscode.WorkspaceFolder, adrId: string): Promise<string> {
