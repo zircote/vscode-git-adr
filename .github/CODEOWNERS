@@ -1,0 +1,29 @@
+# CODEOWNERS for vscode-git-adr
+#
+# These owners will be automatically requested for review
+# when someone opens a pull request that modifies these files.
+#
+# Order matters - the last matching pattern takes precedence.
+
+# Default owners for everything in the repo
+* @zircote
+
+# Source code
+/src/ @zircote
+
+# Tests
+/test/ @zircote
+
+# VS Code extension configuration
+/package.json @zircote
+/tsconfig.json @zircote
+/.eslintrc.json @zircote
+/.prettierrc @zircote
+
+# CI/CD and Release automation
+/.github/workflows/ @zircote
+/.github/agents/ @zircote
+
+# Documentation
+/*.md @zircote
+/docs/ @zircote

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: git-adr CLI Documentation
+    url: https://github.com/zircote/git-adr
+    about: Documentation for the git-adr command-line tool
+  - name: VS Code Extension API
+    url: https://code.visualstudio.com/api
+    about: VS Code extension development documentation

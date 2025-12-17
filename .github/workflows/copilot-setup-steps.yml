@@ -1,0 +1,62 @@
+# Copilot Coding Agent Setup Steps
+#
+# This workflow defines the environment setup for GitHub Copilot coding agent.
+# It runs when Copilot is assigned to an issue to work on code changes.
+#
+# Reference: https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent-to-work-on-tasks
+
+name: Copilot Setup Steps
+
+on: workflow_dispatch
+
+jobs:
+  copilot-setup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Verify build
+        run: |
+          echo "Build verification:"
+          ls -la out/
+          ls -la out/src/
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run unit tests
+        run: xvfb-run -a npm test
+
+      - name: Environment summary
+        run: |
+          echo "=== Environment Summary ==="
+          echo "Node.js version:"
+          node --version
+          echo "npm version:"
+          npm --version
+          echo "TypeScript version:"
+          npx tsc --version
+          echo ""
+          echo "=== Project Structure ==="
+          echo "Source files:"
+          find src -name "*.ts" | head -20
+          echo ""
+          echo "Test files:"
+          find test -name "*.ts" | head -20
+          echo ""
+          echo "=== npm scripts available ==="
+          node -e "console.log(Object.keys(require('./package.json').scripts).join('\n'))"

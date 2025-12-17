@@ -1,0 +1,68 @@
+version: 2
+updates:
+  # npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "npm"
+    groups:
+      # Group minor and patch updates for dev dependencies
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group TypeScript ecosystem updates
+      typescript:
+        patterns:
+          - "typescript"
+          - "@typescript-eslint/*"
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group VS Code tooling updates
+      vscode-tooling:
+        patterns:
+          - "@vscode/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group testing tools
+      testing:
+        patterns:
+          - "mocha"
+          - "sinon"
+          - "@types/mocha"
+          - "@types/sinon"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Avoid major updates without manual review
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - "dependencies"
+      - "github-actions"
