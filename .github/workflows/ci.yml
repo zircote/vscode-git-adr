@@ -10,6 +10,8 @@ jobs:
   lint_and_test:
     name: Lint and Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     strategy:
       matrix:
@@ -44,6 +46,8 @@ jobs:
     name: Package Extension
     needs: lint_and_test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
