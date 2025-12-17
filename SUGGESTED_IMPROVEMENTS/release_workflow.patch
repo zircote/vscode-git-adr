@@ -1,0 +1,18 @@
+# Fix: Add explicit Node.js setup in release workflow validate job
+
+This patch adds explicit Node.js setup to the validate job for better clarity and robustness.
+
+--- .github/workflows/release.yml
++++ .github/workflows/release.yml
+@@ -19,6 +19,11 @@ jobs:
+       - name: Checkout code
+         uses: actions/checkout@v4
+       
++      - name: Use Node.js
++        uses: actions/setup-node@v4
++        with:
++          node-version: '20.x'
++      
+       - name: Get version from tag
+         id: get_version
+         run: |
