@@ -2,7 +2,7 @@
   "name": "git-adr-vscode",
   "displayName": "git-adr",
   "description": "Manage Architecture Decision Records stored in git notes",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "zircote",
   "license": "MIT",
   "repository": {

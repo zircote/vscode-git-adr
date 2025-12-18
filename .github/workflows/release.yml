@@ -193,4 +193,6 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           set -euo pipefail
-          npx --yes @vscode/vsce publish -p "$VSCE_PAT"
+          VSIX_FILE=$(ls dist/*.vsix | head -1)
+          echo "Publishing: $VSIX_FILE"
+          npx --yes @vscode/vsce publish --packagePath "$VSIX_FILE" -p "$VSCE_PAT"
