@@ -188,10 +188,7 @@ jobs:
             dist/*.vsix
             dist/SHA256SUMS
 
-      # Marketplace publishing is intentionally NOT enabled yet.
-      # When you're ready, add a VSCE_PAT repository secret and enable this step.
-      - name: Publish to VS Code Marketplace (disabled)
-        if: false
+      - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
