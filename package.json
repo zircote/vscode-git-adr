@@ -252,7 +252,7 @@
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^25.3.3",
-    "@types/sinon": "^17.0.2",
+    "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.109.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^6.16.0",
@@ -263,7 +263,7 @@
     "glob": "^10.3.10",
     "mocha": "^11.7.5",
     "prettier": "^3.8.1",
-    "sinon": "^17.0.1",
+    "sinon": "^21.0.1",
     "typescript": "5.9.3"
   }
 }
