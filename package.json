@@ -249,7 +249,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "devDependencies": {
-    "@types/glob": "^8.1.0",
+    "@types/glob": "^9.0.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^25.3.3",
     "@types/sinon": "^21.0.0",
