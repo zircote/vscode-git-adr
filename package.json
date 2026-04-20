@@ -262,7 +262,7 @@
     "eslint-config-prettier": "^10.1.8",
     "glob": "^13.0.6",
     "mocha": "^11.7.5",
-    "prettier": "^3.8.2",
+    "prettier": "^3.8.3",
     "sinon": "^21.1.2",
     "typescript": "6.0.2"
   }
